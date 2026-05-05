@@ -7,13 +7,13 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #1e1e1e; }
-    canvas { display: block; }
+    #c { display: block; }
   </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<div id="c"></div>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
 <script>
-  // ── params ───────────────────────────────────────────────────────────────
   let P = { m:8, n:4, a:1, b:1, v:0.02, num:10000 };
 
   const randInt    = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
@@ -27,181 +27,68 @@
     P.b = randChoice(aVals);
   }
 
-  // ── canvas setup ─────────────────────────────────────────────────────────
-  const canvas = document.getElementById('c');
-  const ctx    = canvas.getContext('2d');
-  const dpr    = Math.min(devicePixelRatio, 2);
-
-  function resize() {
-    canvas.width  = innerWidth  * dpr;
-    canvas.height = innerHeight * dpr;
-    canvas.style.width  = innerWidth  + 'px';
-    canvas.style.height = innerHeight + 'px';
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-  }
-  resize();
-  window.addEventListener('resize', resize);
-
-  // ── Chladni equation ─────────────────────────────────────────────────────
-  const PI  = Math.PI;
-  const MIN = 0.002;
-
-  function chladni(x, y) {
-    return P.a * Math.sin(PI*P.n*x) * Math.sin(PI*P.m*y)
-         + P.b * Math.sin(PI*P.m*x) * Math.sin(PI*P.n*y);
-  }
-
-  // ── particles ─────────────────────────────────────────────────────────────
-  const NUM = P.num;
-  const px  = new Float32Array(NUM);
-  const py  = new Float32Array(NUM);
-
-  for (let i = 0; i < NUM; i++) {
-    px[i] = 0.05 + Math.random() * 0.9;
-    py[i] = 0.05 + Math.random() * 0.9;
-  }
-
-  function rnd() { return Math.random() * 2 - 1; }
-
-  // ── animation state ───────────────────────────────────────────────────────
-  let isActive = false;  // true only while SECTION-2 is in viewport
-  let lastTime = 0;
-  const TARGET_FPS = 30;
-  const FRAME_MS   = 1000 / TARGET_FPS;
-
-  function draw(ts) {
-    requestAnimationFrame(draw);
-    if (!isActive) return;                     // paused when out of view
-    if (ts - lastTime < FRAME_MS) return;
-    lastTime = ts;
-
-    const W = innerWidth, H = innerHeight;
-
-    ctx.fillStyle = 'rgb(30,30,30)';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.beginPath();
-
-    const n = Math.min(P.num, NUM);
-    for (let i = 0; i < n; i++) {
-      let x = px[i], y = py[i];
-
-      const eq  = chladni(x, y);
-      let   amp = P.v * Math.abs(eq);
-      if (amp < MIN) amp = MIN;
-
-      x += rnd() * amp;
-      y += rnd() * amp;
-
-      if (x < 0) x = -x;
-      if (x > 1) x = 2 - x;
-      if (y < 0) y = -y;
-      if (y > 1) y = 2 - y;
-      if (x < 0) x = 0; if (x > 1) x = 1;
-      if (y < 0) y = 0; if (y > 1) y = 1;
-
-      px[i] = x; py[i] = y;
-      ctx.rect(x * W, y * H, 1.2, 1.2);
-    }
-    ctx.fill();
-  }
-
-  requestAnimationFrame(draw);
-
-  // ── postMessage listener (receives commands from parent page) ─────────────
-  //
-  //  Expected messages:
-  //    { type: 'chladni', action: 'activate' }          — start animating
-  //    { type: 'chladni', action: 'deactivate' }        — pause animating
-  //    { type: 'chladni', action: 'bucket', n: 0|1|2 } — new 100vh bucket
-  //
-  let lastBucket = -1;
-
-  window.addEventListener('message', e => {
-    const d = e.data;
-
-    // legacy plain-string API kept for back-compat
-    if (d === 'randomise') { randomise(); return; }
-
-    if (!d || d.type !== 'chladni') return;
-
-    if (d.action === 'activate') {
-      isActive = true;
-    } else if (d.action === 'deactivate') {
-      isActive = false;
-    } else if (d.action === 'bucket' && d.n !== lastBucket) {
-      lastBucket = d.n;
-      randomise();
-    }
+  // Listen for scroll messages from the Webflow parent page
+  window.addEventListener('message', function(e) {
+    if (e.data === 'randomise') randomise();
   });
-</script>
 
-<!--
-═══════════════════════════════════════════════════════════════════════════════
-  PARENT PAGE SNIPPET — paste into Webflow's page-level <body> custom code
-  (Settings → Custom Code → Before </body>)
+  new p5(function(p) {
+    const PI = Math.PI, MIN = 0.002;
+    let pts = [], W, H;
 
-  • Replace YOUR_IFRAME_ID with the real ID you gave the iframe element
-  • SECTION-2 must have id="SECTION-2" in Webflow
-═══════════════════════════════════════════════════════════════════════════════
-
-<script>
-(function () {
-  var iframe  = document.getElementById('YOUR_IFRAME_ID');
-  var section = document.getElementById('SECTION-2');
-  if (!iframe || !section) return;
-
-  var lastBucket = -1;
-  var isActive   = false;
-
-  function post(msg) {
-    try { iframe.contentWindow.postMessage(msg, '*'); } catch (e) {}
-  }
-
-  // ── 1. Activate / deactivate when SECTION-2 enters or leaves the viewport
-  var observer = new IntersectionObserver(function (entries) {
-    var visible = entries[0].isIntersecting;
-
-    if (visible && !isActive) {
-      isActive = true;
-      post({ type: 'chladni', action: 'activate' });
-
-      // Bucket 0 fires immediately on first entry
-      if (lastBucket === -1) {
-        lastBucket = 0;
-        post({ type: 'chladni', action: 'bucket', n: 0 });
-      }
+    function chladni(x, y) {
+      return P.a * Math.sin(PI*P.n*x) * Math.sin(PI*P.m*y)
+           + P.b * Math.sin(PI*P.m*x) * Math.sin(PI*P.n*y);
     }
 
-    if (!visible && isActive) {
-      isActive = false;
-      post({ type: 'chladni', action: 'deactivate' });
+    function Pt() {
+      this.x = p.random(0.05, 0.95);
+      this.y = p.random(0.05, 0.95);
     }
-  }, { threshold: 0 });
+    Pt.prototype.move = function() {
+      const eq = chladni(this.x, this.y);
+      let amp = P.v * Math.abs(eq);
+      if (amp < MIN) amp = MIN;
+      this.x += p.random(-amp, amp);
+      this.y += p.random(-amp, amp);
+      if (this.x < 0) this.x = -this.x;
+      if (this.x > 1) this.x = 2 - this.x;
+      if (this.y < 0) this.y = -this.y;
+      if (this.y > 1) this.y = 2 - this.y;
+      this.x = p.constrain(this.x, 0, 1);
+      this.y = p.constrain(this.y, 0, 1);
+    };
+    Pt.prototype.show = function() { p.point(this.x*W, this.y*H); };
 
-  observer.observe(section);
+    p.setup = function() {
+      const cnv = p.createCanvas(window.innerWidth, window.innerHeight);
+      cnv.parent('c');
+      p.pixelDensity(Math.min(window.devicePixelRatio, 2));
+      W = p.width; H = p.height;
+      for (let i = 0; i < 10000; i++) pts.push(new Pt());
+    };
 
-  // ── 2. Fire randomise at each 100vh mark (0 / 100 / 200) inside the section
-  window.addEventListener('scroll', function () {
-    if (!isActive) return;
+    p.windowResized = function() {
+      p.resizeCanvas(window.innerWidth, window.innerHeight);
+      W = p.width; H = p.height;
+    };
 
-    var sectionTop = section.getBoundingClientRect().top + window.scrollY;
-    var offset     = window.scrollY - sectionTop;
-    if (offset < 0) return;
+    p.draw = function() {
+      p.background(30);
+      p.stroke(255);
+      p.strokeWeight(1.2);
+      const n = Math.min(P.num, pts.length);
+      for (let i = 0; i < n; i++) { pts[i].move(); pts[i].show(); }
+    };
+  }, 'c');
 
-    // clamp to 0-2 so only 3 patterns fire across the 300vh section
-    var bucket = Math.min(Math.floor(offset / window.innerHeight), 2);
-    if (bucket !== lastBucket) {
-      lastBucket = bucket;
-      post({ type: 'chladni', action: 'bucket', n: bucket });
-    }
+  // Scroll listener — fires every 100vh
+  const VH = window.innerHeight;
+  let lastBucket = -1;
+  window.addEventListener('scroll', () => {
+    const bucket = Math.floor(window.scrollY / VH);
+    if (bucket !== lastBucket) { lastBucket = bucket; randomise(); }
   }, { passive: true });
-})();
 </script>
-
-═══════════════════════════════════════════════════════════════════════════════
--->
 </body>
 </html>
