@@ -7,86 +7,81 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #1e1e1e; }
-    #c { display: block; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
-<div id="c"></div>
-<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+<canvas id="c"></canvas>
 <script>
-  let P = { m:8, n:4, a:1, b:1, v:0.02, num:10000 };
-
-  const randInt    = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
-  const randChoice = arr    => arr[Math.floor(Math.random() * arr.length)];
+  const PI = Math.PI, MIN = 0.002, NUM = 10000;
+  let P = { m: 8, n: 4, a: 1, b: 1, v: 0.02 };
   const aVals = [-2, -1, 1, 2];
+  const ri = (a, b) => (Math.random() * (b - a + 1) | 0) + a;
+  const rc = arr => arr[Math.random() * arr.length | 0];
 
   function randomise() {
-    P.m = randInt(1, 16);
-    P.n = randInt(1, 16);
-    P.a = randChoice(aVals);
-    P.b = randChoice(aVals);
+    P.m = ri(1, 16); P.n = ri(1, 16);
+    P.a = rc(aVals); P.b = rc(aVals);
   }
 
-  // Listen for scroll messages from the Webflow parent page
-  window.addEventListener('message', function(e) {
-    if (e.data === 'randomise') randomise();
-  });
+  window.addEventListener('message', e => { if (e.data === 'randomise') randomise(); });
 
-  new p5(function(p) {
-    const PI = Math.PI, MIN = 0.002;
-    let pts = [], W, H;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const dpr = Math.min(devicePixelRatio || 1, 2);
 
-    function chladni(x, y) {
-      return P.a * Math.sin(PI*P.n*x) * Math.sin(PI*P.m*y)
-           + P.b * Math.sin(PI*P.m*x) * Math.sin(PI*P.n*y);
+  let PW, PH;
+  function resize() {
+    const cssW = window.innerWidth, cssH = window.innerHeight;
+    canvas.style.width  = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    canvas.width  = cssW * dpr;
+    canvas.height = cssH * dpr;
+    PW = canvas.width; PH = canvas.height;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const xs = new Float32Array(NUM);
+  const ys = new Float32Array(NUM);
+  for (let i = 0; i < NUM; i++) {
+    xs[i] = 0.05 + Math.random() * 0.90;
+    ys[i] = 0.05 + Math.random() * 0.90;
+  }
+
+  function chladni(x, y) {
+    return P.a * Math.sin(PI * P.n * x) * Math.sin(PI * P.m * y)
+         + P.b * Math.sin(PI * P.m * x) * Math.sin(PI * P.n * y);
+  }
+
+  function frame() {
+    const img = ctx.createImageData(PW, PH);
+    const buf = new Uint32Array(img.data.buffer);
+    const BG = 0xFF1E1E1E, WHITE = 0xFFFFFFFF;
+    buf.fill(BG);
+
+    const v = P.v;
+    for (let i = 0; i < NUM; i++) {
+      let x = xs[i], y = ys[i];
+      const amp = Math.max(v * Math.abs(chladni(x, y)), MIN);
+      x += (Math.random() * 2 - 1) * amp;
+      y += (Math.random() * 2 - 1) * amp;
+      if (x < 0) x = -x; else if (x > 1) x = 2 - x;
+      if (y < 0) y = -y; else if (y > 1) y = 2 - y;
+      if (x < 0) x = 0; else if (x > 1) x = 1;
+      if (y < 0) y = 0; else if (y > 1) y = 1;
+      xs[i] = x; ys[i] = y;
+      const px = x * (PW - 1) | 0, py = y * (PH - 1) | 0;
+      buf[py * PW + px] = WHITE;
     }
+    ctx.putImageData(img, 0, 0);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 
-    function Pt() {
-      this.x = p.random(0.05, 0.95);
-      this.y = p.random(0.05, 0.95);
-    }
-    Pt.prototype.move = function() {
-      const eq = chladni(this.x, this.y);
-      let amp = P.v * Math.abs(eq);
-      if (amp < MIN) amp = MIN;
-      this.x += p.random(-amp, amp);
-      this.y += p.random(-amp, amp);
-      if (this.x < 0) this.x = -this.x;
-      if (this.x > 1) this.x = 2 - this.x;
-      if (this.y < 0) this.y = -this.y;
-      if (this.y > 1) this.y = 2 - this.y;
-      this.x = p.constrain(this.x, 0, 1);
-      this.y = p.constrain(this.y, 0, 1);
-    };
-    Pt.prototype.show = function() { p.point(this.x*W, this.y*H); };
-
-    p.setup = function() {
-      const cnv = p.createCanvas(window.innerWidth, window.innerHeight);
-      cnv.parent('c');
-      p.pixelDensity(Math.min(window.devicePixelRatio, 2));
-      W = p.width; H = p.height;
-      for (let i = 0; i < 10000; i++) pts.push(new Pt());
-    };
-
-    p.windowResized = function() {
-      p.resizeCanvas(window.innerWidth, window.innerHeight);
-      W = p.width; H = p.height;
-    };
-
-    p.draw = function() {
-      p.background(30);
-      p.stroke(255);
-      p.strokeWeight(1.2);
-      const n = Math.min(P.num, pts.length);
-      for (let i = 0; i < n; i++) { pts[i].move(); pts[i].show(); }
-    };
-  }, 'c');
-
-  // Scroll listener — fires every 100vh
-  const VH = window.innerHeight;
   let lastBucket = -1;
   window.addEventListener('scroll', () => {
-    const bucket = Math.floor(window.scrollY / VH);
+    const bucket = window.scrollY / window.innerHeight | 0;
     if (bucket !== lastBucket) { lastBucket = bucket; randomise(); }
   }, { passive: true });
 </script>
