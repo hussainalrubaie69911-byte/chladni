@@ -139,61 +139,6 @@
 
 </script>
 
-<!--
-==========================================================================
-  WEBFLOW PARENT SNIPPET
-  Paste into: Webflow → Page Settings → Custom Code → Before </body>
-  Replace YOUR_IFRAME_ID with the actual ID of your iframe element.
-  Make sure your section has the Webflow ID "SECTION-2".
-==========================================================================
 
-<script>
-(function () {
-  var iframe  = document.getElementById('YOUR_IFRAME_ID');
-  var section = document.getElementById('SECTION-2');
-  if (!iframe || !section) return;
-
-  var lastBucket = -1;
-  var isActive   = false;
-
-  function post(msg) {
-    try { iframe.contentWindow.postMessage(msg, '*'); } catch(e) {}
-  }
-
-  // Watch SECTION-2 entering / leaving viewport
-  var io = new IntersectionObserver(function(entries) {
-    var visible = entries[0].isIntersecting;
-    if (visible && !isActive) {
-      isActive = true;
-      post({ action: 'activate' });
-      if (lastBucket === -1) {
-        lastBucket = 0;
-        post({ action: 'bucket', n: 0 });
-      }
-    }
-    if (!visible && isActive) {
-      isActive = false;
-      post({ action: 'deactivate' });
-    }
-  }, { threshold: 0 });
-  io.observe(section);
-
-  // Randomise at 0vh, 100vh, 200vh inside the 300vh section
-  window.addEventListener('scroll', function() {
-    if (!isActive) return;
-    var top    = section.getBoundingClientRect().top + window.scrollY;
-    var offset = window.scrollY - top;
-    if (offset < 0) return;
-    var bucket = Math.min(Math.floor(offset / window.innerHeight), 2);
-    if (bucket !== lastBucket) {
-      lastBucket = bucket;
-      post({ action: 'bucket', n: bucket });
-    }
-  }, { passive: true });
-})();
-</script>
-
-==========================================================================
--->
 </body>
 </html>
