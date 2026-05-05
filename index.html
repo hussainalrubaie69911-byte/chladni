@@ -147,6 +147,59 @@
   • SECTION-2 must have id="SECTION-2" in Webflow
 ═══════════════════════════════════════════════════════════════════════════════
 
+<script>
+(function () {
+  var iframe  = document.getElementById('YOUR_IFRAME_ID');
+  var section = document.getElementById('SECTION-2');
+  if (!iframe || !section) return;
+
+  var lastBucket = -1;
+  var isActive   = false;
+
+  function post(msg) {
+    try { iframe.contentWindow.postMessage(msg, '*'); } catch (e) {}
+  }
+
+  // ── 1. Activate / deactivate when SECTION-2 enters or leaves the viewport
+  var observer = new IntersectionObserver(function (entries) {
+    var visible = entries[0].isIntersecting;
+
+    if (visible && !isActive) {
+      isActive = true;
+      post({ type: 'chladni', action: 'activate' });
+
+      // Bucket 0 fires immediately on first entry
+      if (lastBucket === -1) {
+        lastBucket = 0;
+        post({ type: 'chladni', action: 'bucket', n: 0 });
+      }
+    }
+
+    if (!visible && isActive) {
+      isActive = false;
+      post({ type: 'chladni', action: 'deactivate' });
+    }
+  }, { threshold: 0 });
+
+  observer.observe(section);
+
+  // ── 2. Fire randomise at each 100vh mark (0 / 100 / 200) inside the section
+  window.addEventListener('scroll', function () {
+    if (!isActive) return;
+
+    var sectionTop = section.getBoundingClientRect().top + window.scrollY;
+    var offset     = window.scrollY - sectionTop;
+    if (offset < 0) return;
+
+    // clamp to 0-2 so only 3 patterns fire across the 300vh section
+    var bucket = Math.min(Math.floor(offset / window.innerHeight), 2);
+    if (bucket !== lastBucket) {
+      lastBucket = bucket;
+      post({ type: 'chladni', action: 'bucket', n: bucket });
+    }
+  }, { passive: true });
+})();
+</script>
 
 ═══════════════════════════════════════════════════════════════════════════════
 -->
